@@ -1,0 +1,1 @@
+{"version":3,"file":"Validatable.d.ts","sourceRoot":"","sources":["../../src/connectors/Validatable.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,GAAG,MAAM,KAAK,CAAC;AAI3B,8BAAsB,WAAW;IAC7B,QAAQ;IASR,QAAQ,CAAC,OAAO,IAAI,GAAG;IACvB,QAAQ,CAAC,MAAM,IAAI,GAAG,CAAC,MAAM;CAChC"}

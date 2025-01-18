@@ -1,6 +1,6 @@
 *.tar
 node_modules/
-dist/
+
 .vscode
 .DS_Store
 *.spec.ts
