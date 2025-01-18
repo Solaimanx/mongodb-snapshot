@@ -12,52 +12,68 @@ const lodash_1 = require("lodash");
 const rxjs_for_await_1 = require("rxjs-for-await");
 const utils_1 = require("../../utils");
 const BSON_DOC_HEADER_SIZE = 4;
-const documentFilterSchema = joi.alternatives().try([
-    joi.string(),
-    joi.func()
-]).required();
+const documentFilterSchema = joi
+    .alternatives()
+    .try([joi.string(), joi.func()])
+    .required();
 const schema = joi.object({
-    connection: joi.object({
+    connection: joi
+        .object({
         uri: joi.string().required(),
         dbname: joi.string().required(),
         connectTimeoutMS: joi.number().optional(),
-        isAtlasFreeTier: joi.boolean().optional()
-    }).required(),
-    assource: joi.object({
+        isAtlasFreeTier: joi.boolean().optional(),
+    })
+        .required(),
+    assource: joi
+        .object({
         ...Connector_1.SOURCE_CONNECTOR_BASE_OPTIONS_SCHEMA,
-    }).required(),
-    astarget: joi.object({
+    })
+        .required(),
+    astarget: joi
+        .object({
         ...Connector_1.TARGET_CONNECTOR_BASE_OPTIONS_SCHEMA,
         documents_bulk_write_count: joi.number().optional(),
-        upsert: joi.object().pattern(joi.string(), joi.alternatives(documentFilterSchema, joi.array().items(documentFilterSchema))).optional(),
-        writeDocument: joi.func().optional()
-    }).required(),
+        upsert: joi
+            .object()
+            .pattern(joi.string(), joi.alternatives(documentFilterSchema, joi.array().items(documentFilterSchema)))
+            .optional(),
+        writeDocument: joi.func().optional(),
+    })
+        .required(),
 });
 class MongoDBDuplexConnector extends Validatable_1.Validatable {
-    constructor({ connection, assource = {}, astarget = {} }) {
+    constructor({ connection, assource = {}, astarget = {}, }) {
         super();
-        this.type = 'MongoDB Connector';
+        this.type = "MongoDB Connector";
         this.connection = connection;
         this.assource = lodash_1.merge({ bulk_read_size: 50 * 1024 }, assource);
-        this.astarget = lodash_1.merge({ remove_on_failure: false, remove_on_startup: false, documents_bulk_write_count: 1000 }, astarget);
+        this.astarget = lodash_1.merge({
+            remove_on_failure: false,
+            remove_on_startup: false,
+            documents_bulk_write_count: 1000,
+        }, astarget);
     }
     // as source
-    chunk$({ name: collection_name, }) {
+    chunk$({ name: collection_name }) {
         return rxjs_1.defer(async () => {
             if (!this.db || !this.collections) {
                 return rxjs_1.EMPTY;
             }
             // check if collection exist
-            if (!this.collections.find(collection => collection.collectionName === collection_name)) {
+            if (!this.collections.find((collection) => collection.collectionName === collection_name)) {
                 return rxjs_1.EMPTY;
             }
             const adminDb = this.db.admin();
             const { version } = await adminDb.serverStatus();
-            let majorVersion = version.split('.')[0];
+            let majorVersion = version.split(".")[0];
             majorVersion = majorVersion && Number(majorVersion);
             const collection = this.db.collection(collection_name);
             // removes timeout property if in atlas free tier, since noTimeout cursors are forbidden (the property timeout cannot be set to any value)
-            let chunkCursor = collection.find({}, { timeout: this.connection.isAtlasFreeTier ? undefined : false, batchSize: this.assource.bulk_read_size });
+            let chunkCursor = collection.find({}, {
+                timeout: this.connection.isAtlasFreeTier ? undefined : false,
+                batchSize: this.assource.bulk_read_size,
+            });
             if (majorVersion < 4) {
                 chunkCursor = chunkCursor.snapshot(true);
             }
@@ -68,13 +84,19 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
         if (!this.db || !this.client) {
             throw new Error("Need to connect to the data source before using this method.");
         }
-        return this.client.isConnected() && this.db.databaseName === this.connection.dbname;
+        try {
+            const dbName = this.client.db().databaseName;
+            return dbName === this.connection.dbname;
+        }
+        catch (error) {
+            return false; // Not connected if accessing `databaseName` fails
+        }
     }
     async fullname() {
         return `type: ${this.type}, database: ${this.connection.dbname}`;
     }
     options() {
-        return lodash_1.pick(this, 'connection', 'assource', 'astarget');
+        return lodash_1.pick(this, "connection", "assource", "astarget");
     }
     schema() {
         return schema;
@@ -93,23 +115,31 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
         }
     }
     async writeCollectionMetadata(metadata) {
-        var _a;
-        if (!this.db || !((_a = this.client) === null || _a === void 0 ? void 0 : _a.isConnected())) {
+        if (!this.db || !this.client) {
             throw new Error("Need to connect to the data source before using this method.");
+        }
+        // Ensure client is operational
+        try {
+            this.client.db().databaseName;
+        }
+        catch (error) {
+            throw new Error("MongoDB client is not connected.");
         }
         // create indexes
         if (metadata.indexes.length > 0) {
             // deletes v property from indexes metadata if in atlas free tier
-            this.connection.isAtlasFreeTier && metadata.indexes.forEach((i) => delete i.v);
+            this.connection.isAtlasFreeTier &&
+                metadata.indexes.forEach((i) => delete i.v);
             return this.db.collection(metadata.name).createIndexes(metadata.indexes);
         }
         return Promise.resolve();
     }
     writeCollectionData(collection_name, chunk$) {
-        const documents$ = utils_1.convertAsyncGeneratorToObservable(getDocumentsGenerator(chunk$))
-            .pipe(operators_1.filter(({ obj: document }) => {
+        const documents$ = utils_1.convertAsyncGeneratorToObservable(getDocumentsGenerator(chunk$)).pipe(operators_1.filter(({ obj: document }) => {
             // filter documents to write into mongodb
-            return this.astarget.writeDocument ? this.astarget.writeDocument(collection_name, document) : true;
+            return this.astarget.writeDocument
+                ? this.astarget.writeDocument(collection_name, document)
+                : true;
         }));
         return documents$.pipe(operators_1.bufferCount(this.astarget.documents_bulk_write_count), operators_1.mergeMap(async (documents) => {
             if (documents.length > 0) {
@@ -126,7 +156,9 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
         const upsert = this.astarget.upsert;
         const replaceFilter = Object.entries(upsert || {}).reduce((docFilterFn, [collectionSelector, collectionDocumentFilters]) => {
             if (utils_1.hasRegexMatch(collectionSelector, collectionName)) {
-                collectionDocumentFilters = (!lodash_1.isArray(collectionDocumentFilters)) ? [collectionDocumentFilters] : collectionDocumentFilters;
+                collectionDocumentFilters = !lodash_1.isArray(collectionDocumentFilters)
+                    ? [collectionDocumentFilters]
+                    : collectionDocumentFilters;
                 const currCollectionDocumentFilterFn = collectionDocumentFilters.reduce((collectionDocumentFilterFn, filter) => {
                     let documentFilterFn = undefined;
                     if (lodash_1.isFunction(filter)) {
@@ -146,8 +178,8 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
                                 return {
                                     $and: [
                                         collectionDocumentFilterFn(document),
-                                        documentFilterFn(document)
-                                    ]
+                                        documentFilterFn(document),
+                                    ],
                                 };
                             }
                             return documentFilterFn(document);
@@ -161,8 +193,8 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
                             return {
                                 $or: [
                                     docFilterFn(document),
-                                    currCollectionDocumentFilterFn(document)
-                                ]
+                                    currCollectionDocumentFilterFn(document),
+                                ],
                             };
                         }
                         return currCollectionDocumentFilterFn(document);
@@ -173,27 +205,28 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
         }, undefined);
         async function write(documents) {
             return await collection.bulkWrite(documents.map(({ obj: document }) => ({
-                // either replacing or inserting new document for each income document 
-                ...(replaceFilter ? ({
-                    replaceOne: {
-                        upsert: true,
-                        replacement: document,
-                        filter: replaceFilter(document),
+                // either replacing or inserting new document for each income document
+                ...(replaceFilter
+                    ? {
+                        replaceOne: {
+                            upsert: true,
+                            replacement: document,
+                            filter: replaceFilter(document),
+                        },
                     }
-                }) : ({
-                    insertOne: {
-                        document
-                    }
-                })),
+                    : {
+                        insertOne: {
+                            document,
+                        },
+                    }),
             }), {
                 ordered: false,
                 bypassDocumentValidation: true,
             }));
         }
-        return write(documents)
-            .catch(async function () {
+        return write(documents).catch(async function () {
             // there sometimes failures during insertions because documents contain properties with invalid key names (containing the ".")
-            documents.forEach(({ obj: document }) => filterInvalidKeys(document, key => key && key.includes('.')));
+            documents.forEach(({ obj: document }) => filterInvalidKeys(document, (key) => key && key.includes(".")));
             return write(documents);
         });
     }
@@ -217,23 +250,36 @@ class MongoDBDuplexConnector extends Validatable_1.Validatable {
         this.collections = await this.db.collections();
     }
     async close() {
-        var _a;
-        if ((_a = this.client) === null || _a === void 0 ? void 0 : _a.isConnected()) {
-            await this.client.close();
+        if (this.client) {
+            try {
+                await this.client.close();
+            }
+            catch (error) {
+                console.warn("Failed to close MongoDB client:", error);
+            }
         }
         this.client = undefined;
         this.db = undefined;
         this.collections = undefined;
     }
     async transferable() {
-        var _a;
-        if (!((_a = this.client) === null || _a === void 0 ? void 0 : _a.isConnected()) || !this.collections) {
+        if (!this.client || !this.collections) {
+            throw new Error(`MongoDB client is not connected`);
+        }
+        // Verify the connection status
+        try {
+            this.client.db().databaseName;
+        }
+        catch (error) {
             throw new Error(`MongoDB client is not connected`);
         }
         const all_collections = this.collections.filter((collection) => !collection.collectionName.startsWith("system."));
         return (await Promise.all(all_collections.map(async (collection) => {
             try {
-                const [stats, indexes] = await Promise.all([collection.stats(), collection.indexes()]);
+                const [stats, indexes] = await Promise.all([
+                    collection.stats(),
+                    collection.indexes(),
+                ]);
                 return {
                     name: collection.collectionName,
                     size: stats.size,
@@ -253,12 +299,12 @@ function notEmpty(value) {
     return value !== null && value !== undefined;
 }
 function filterInvalidKeys(obj, filterKeyFn) {
-    const invalid_keys = Object.keys(obj).filter(key => filterKeyFn(key));
+    const invalid_keys = Object.keys(obj).filter((key) => filterKeyFn(key));
     for (const invalid_key of invalid_keys) {
         delete obj[invalid_key];
     }
     for (let k in obj) {
-        if (obj[k] && typeof obj[k] === 'object') {
+        if (obj[k] && typeof obj[k] === "object") {
             filterInvalidKeys(obj[k], filterKeyFn);
         }
     }
@@ -281,7 +327,7 @@ async function* getDocumentsGenerator(chunk$) {
             buffer = buffer.slice(next_doclen);
             yield {
                 raw,
-                obj
+                obj,
             };
             if (buffer.length >= BSON_DOC_HEADER_SIZE) {
                 next_doclen = buffer.readInt32LE(0);

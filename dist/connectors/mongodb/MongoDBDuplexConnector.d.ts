@@ -1,8 +1,8 @@
 /// <reference types="node" />
 import { FilterQuery } from "mongodb";
 import { Observable } from "rxjs";
-import * as joi from 'joi';
-import { TargetConnector, SourceConnector, CollectionData, SourceConnectorBaseOptions, TargetConnectorBaseOptions } from '../Connector';
+import * as joi from "joi";
+import { TargetConnector, SourceConnector, CollectionData, SourceConnectorBaseOptions, TargetConnectorBaseOptions } from "../Connector";
 import { MongoDBConnection, CollectionMetadata as CollectionMetadata } from "../../contracts";
 import { Validatable } from "../Validatable";
 export interface MongoDBConnectorOptions {
@@ -19,29 +19,29 @@ export interface MongoDBConnectorOptions {
 declare type AsSourceMongoDBOptions = SourceConnectorBaseOptions;
 declare type AsTargetMongoDBOptions = TargetConnectorBaseOptions & {
     /**
-    * The amount of documents to write in each operation.
-    * The greater this number is the better performance it will provide as it will make less writes to the MongoDB server.
-    */
+     * The amount of documents to write in each operation.
+     * The greater this number is the better performance it will provide as it will make less writes to the MongoDB server.
+     */
     documents_bulk_write_count: number;
     /**
-    * insert or update exist documents on the target connector, overriding them by searching specific fields.
-    * the upsert options is a dictionary representation of a collection selector to a document filter.
-    * The collection selector can either be a regular expression or the literal name of the collection.
-    * The document filter can be the literal name or regex of the field / fields or a function to perform the search of an exist document by (it is recommended to use something that compose a unique key).
-    * @example
-    * ```
-    * {
-    *   ...
-    *   upsert: {
-    *       "prefix_.*_suffix": (document) => pick(document, ['p1', 'p2', 'p3']),
-    *       "collection_0": (document) => ({ p1: 'p1', p2: { $gte: 0 }}),
-    *       "collection_1": ['p1', 'p2', 'p3'],
-    *       "collection_2": ['p.*'],
-    *       ".*": "_id"
-    *   }
-    * }
-    * ```
-    */
+     * insert or update exist documents on the target connector, overriding them by searching specific fields.
+     * the upsert options is a dictionary representation of a collection selector to a document filter.
+     * The collection selector can either be a regular expression or the literal name of the collection.
+     * The document filter can be the literal name or regex of the field / fields or a function to perform the search of an exist document by (it is recommended to use something that compose a unique key).
+     * @example
+     * ```
+     * {
+     *   ...
+     *   upsert: {
+     *       "prefix_.*_suffix": (document) => pick(document, ['p1', 'p2', 'p3']),
+     *       "collection_0": (document) => ({ p1: 'p1', p2: { $gte: 0 }}),
+     *       "collection_1": ['p1', 'p2', 'p3'],
+     *       "collection_2": ['p.*'],
+     *       ".*": "_id"
+     *   }
+     * }
+     * ```
+     */
     upsert?: {
         [collection: string]: DocumentFilter | DocumentFilter[];
     };
@@ -67,8 +67,8 @@ export declare class MongoDBDuplexConnector extends Validatable implements Sourc
     private client?;
     private db?;
     private collections?;
-    constructor({ connection, assource, astarget }: MongoDBConnectorOptions);
-    chunk$({ name: collection_name, }: CollectionMetadata): Observable<Buffer>;
+    constructor({ connection, assource, astarget, }: MongoDBConnectorOptions);
+    chunk$({ name: collection_name }: CollectionMetadata): Observable<Buffer>;
     exists(): Promise<boolean>;
     fullname(): Promise<string>;
     options(): Pick<this, "connection" | "assource" | "astarget">;
